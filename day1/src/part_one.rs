@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 const PLACEHOLDER_CHAR: char = ' ';
 
 pub fn parse_line(line: &str) -> usize {

@@ -76,7 +76,7 @@ pub fn parse_line_re(line: &str) -> usize {
 }
 
 pub fn parse_line_aho(line: &str) -> usize {
-    let mut matches = AHO.find_iter(line);
+    let mut matches = AHO.find_overlapping_iter(line);
     let partial = if let Some(m) = matches.next() {
         let n = m.pattern().as_usize();
         if n < 10 { n } else { n - 9 }
@@ -104,16 +104,6 @@ mod tests {
         ("a1b2c3d4e5f", 15),
         ("treb7uchet", 77),
     ];
-
-    const WORDY: [(&str, usize); 7] = [
-            ("two1nine", 29),
-            ("eightwothree", 83),
-            ("abcone2threexyz", 13),
-            ("xtwone3four", 24),
-            ("4nineeightseven2", 42),
-            ("zoneight234", 14),
-            ("7pqrstsixteen", 76),
-        ];
         
     #[test]
     fn calibration_simple_re() {
@@ -131,6 +121,16 @@ mod tests {
         }
     }
 
+    const WORDY: [(&str, usize); 7] = [
+            ("two1nine", 29),
+            ("eightwothree", 83),
+            ("abcone2threexyz", 13),
+            ("xtwone3four", 24),
+            ("4nineeightseven2", 42),
+            ("zoneight234", 14),
+            ("7pqrstsixteen", 76),
+        ];
+
     #[test]
     fn calibration_wordy_re() {
         for (line, expectation) in WORDY {
@@ -146,4 +146,27 @@ mod tests {
             assert_eq!(result, expectation);
         }
     }
+
+    const OVERLAPPING: [(&str, usize); 2] = [
+        ("twone3threeight", 28),
+        ("nineight4sevenine", 99)
+    ];
+
+    #[test]
+    fn calibration_overlapping_re() {
+        for (line, expectation) in OVERLAPPING {
+            let result = parse_line_re(line);
+            assert_ne!(result, expectation);
+        }
+    }
+
+    #[test]
+    fn calibration_overlapping_aho() {
+        for (line, expectation) in OVERLAPPING {
+            let result = parse_line_aho(line);
+            assert_eq!(result, expectation);
+        }
+    }
+
+
 }
