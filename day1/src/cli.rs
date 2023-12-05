@@ -6,8 +6,11 @@ pub struct Cli {
     /// File to parse
     pub path: String,
     /// Part two
-    #[arg(short, long)]
-    pub part_two: bool
+    #[arg(long)]
+    pub part_two: bool,
+    /// Part two aho
+    #[arg(long)]
+    pub part_two_aho: bool,
 }
 
 pub fn parse() -> Cli {

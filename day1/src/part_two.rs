@@ -1,58 +1,95 @@
-use anyhow::Result;
-use winnow::prelude::*;
-use winnow::{
-    ascii::digit1,
-    combinator::{alt, dispatch, fail, success},
-    token::{any, one_of, tag},
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use phf::phf_map;
+use {
+    once_cell::sync::Lazy,
+    regex::Regex,
 };
 
-const PLACEHOLDER_CHAR: char = ' ';
+static RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"one|two|three|four|five|six|seven|eight|nine|[0-9]").unwrap());
 
-fn parse_word_number<'s>(input: &mut &'s str) -> PResult<char> {
-        dispatch!(any;
-            "one"   => success('1'),
-            "two"   => success('2'),
-            "three" => success('3'),
-            "four"  => success('4'),
-            "five"  => success('5'),
-            "six"   => success('6'),
-            "seven" => success('7'),
-            "eight" => success('8'),
-            "nine"  => success('9'),
-            _ => fail::<_, _, _>
-        )
-    .parse_next(input)
-}
+const PATTERNS: [&str; 19] = [
+    "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+    "one",
+    "two",
+    "three",
+    "four",
+    "five",
+    "six",
+    "seven",
+    "eight",
+    "nine"
+    ];
 
-fn parse_digit_number<'s>(input: &mut &'s str) -> PResult<char> {
-    one_of('0'..='9').parse_next(input)
-}
+static AHO: Lazy<AhoCorasick> = Lazy::new(|| AhoCorasickBuilder::new().build(PATTERNS).unwrap());
 
-fn parse_number<'s>(input: &mut &'s str) -> PResult<char> {
-    alt((
-        digit1,
-        parse_word_number
-    )).parse_next(input)
-}
+static DECODE: phf::Map<&'static str, usize> = phf_map! {
+    "0" => 0,
+    "1" => 1,
+    "2" => 2,
+    "3" => 3,
+    "4" => 4,
+    "5" => 5,
+    "6" => 6,
+    "7" => 7,
+    "8" => 8,
+    "9" => 9,
+    "one" => 1,
+    "two" => 2,
+    "three" => 3,
+    "four" => 4,
+    "five" => 5,
+    "six" => 6,
+    "seven" => 7,
+    "eight" => 8,
+    "nine" => 9
+};
 
-pub fn parse_line(line: &str) -> usize {
-    let mut acc = String::with_capacity(2);
-    let mut last_seen = PLACEHOLDER_CHAR;
-    for chr in line.chars() {
-        match chr {
-            '0'..='9' => {
-                if last_seen == PLACEHOLDER_CHAR {
-                    acc.push(chr);
-                }
-                last_seen = chr;
-            }
-            _ => {}
+
+pub fn parse_line_re(line: &str) -> usize {
+    let mut matches = RE.find_iter(line);
+    let partial = if let Some(m) = matches.next() {
+        match DECODE.get(m.as_str()) {
+            Some(n) => n,
+            None => {println!("err no phf match for {}, from line {}", m.as_str(), line); return 0}
         }
+    } else {
+        println!("err no regex matches from line {}", line);
+        return 0
+    };
+
+    if let Some(m) = matches.last() {
+        match DECODE.get(m.as_str()) {
+            Some(n) => {
+                let rtn = (partial * 10) + n;
+                println!("ok: {}, from line {}", rtn, line);
+                rtn
+            },
+            None => {
+                println!("err no phf match for {}, from line {}", m.as_str(), line); 
+                0
+            }
+        }
+    } else {
+        println!("ok: {}{}, from line {}", partial, partial, line);
+        (partial * 10) + partial
     }
-    acc.push(last_seen);
-    match usize::from_str_radix(&acc, 10) {
-        Ok(v) => v,
-        Err(_) => { println!("err parsing {}, from line {}", acc, line); 0 }
+}
+
+pub fn parse_line_aho(line: &str) -> usize {
+    let mut matches = AHO.find_iter(line);
+    let partial = if let Some(m) = matches.next() {
+        let n = m.pattern().as_usize();
+        if n < 10 { n } else { n - 9 }
+    } else {
+        println!("err no aho matches from line {}", line);
+        return 0
+    };
+
+    if let Some(m) = matches.last() {
+        let n = m.pattern().as_usize();
+        if n < 10 { (partial * 10) + n } else { (partial * 10) + (n - 9) }
+    } else {
+        (partial * 10) + partial
     }
 }
 
@@ -60,30 +97,52 @@ pub fn parse_line(line: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    const SIMPLE: [(&str, usize); 4] = [
+        ("1abc2", 12),
+        ("pqr3stu8vwx", 38),
+        ("a1b2c3d4e5f", 15),
+        ("treb7uchet", 77),
+    ];
+
+    const WORDY: [(&str, usize); 7] = [
+            ("two1nine", 29),
+            ("eightwothree", 83),
+            ("abcone2threexyz", 13),
+            ("xtwone3four", 24),
+            ("4nineeightseven2", 42),
+            ("zoneight234", 14),
+            ("7pqrstsixteen", 76),
+        ];
         
     #[test]
-    fn calibration_value_from_line() {
-        let lines = [
-            ("1abc2", 12),
-            ("pqr3stu8vwx", 38),
-            ("a1b2c3d4e5f", 15),
-            ("treb7uchet", 77),
-        ];
-        for (line, expectation) in lines {
-            let result = parse_line(line);
+    fn calibration_simple_re() {
+        for (line, expectation) in SIMPLE {
+            let result = parse_line_re(line);
             assert_eq!(result, expectation);
         }
     }
 
     #[test]
-    fn parses_a_digit() {
-        let lines = [
-            ("lalaone", "one"),
-            ("onon2three", "2"),
-        ];
+    fn calibration_simple_aho() {
+        for (line, expectation) in SIMPLE {
+            let result = parse_line_aho(line);
+            assert_eq!(result, expectation);
+        }
+    }
 
-        for (line, expectation) in lines {
-            let result = parse_number(&mut &line).unwrap();
+    #[test]
+    fn calibration_wordy_re() {
+        for (line, expectation) in WORDY {
+            let result = parse_line_re(line);
+            assert_eq!(result, expectation);
+        }
+    }
+
+    #[test]
+    fn calibration_wordy_aho() {
+        for (line, expectation) in WORDY {
+            let result = parse_line_aho(line);
             assert_eq!(result, expectation);
         }
     }
