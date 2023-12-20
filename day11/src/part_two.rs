@@ -40,7 +40,7 @@ fn parse_line_to_stars(input: &[u8], out: &mut [Star; ROW_SIZE]) -> bool {
 
             let val = <[u8; 16]>::from(val);
             
-            out[];
+
 
             // increment
             row_idx += 1;
